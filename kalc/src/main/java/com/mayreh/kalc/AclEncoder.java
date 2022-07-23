@@ -1,11 +1,15 @@
 package com.mayreh.kalc;
 
-import org.apache.kafka.common.acl.AclBinding;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.kafka.common.acl.AclOperation;
-import org.apache.kafka.common.acl.AclPermissionType;
-import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.resource.ResourceType;
 
+import com.mayreh.kalc.AclEntry.OperationCondition;
+import com.mayreh.kalc.AclEntry.PermissionType;
+import com.mayreh.kalc.AclEntry.ResourceTypeCondition;
+import com.mayreh.kalc.AclEntry.StringCondition;
 import com.microsoft.z3.BoolExpr;
 import com.microsoft.z3.CharSort;
 import com.microsoft.z3.Context;
@@ -13,14 +17,16 @@ import com.microsoft.z3.EnumSort;
 import com.microsoft.z3.Expr;
 import com.microsoft.z3.SeqSort;
 
-public class AclEncoder {
-    static final String WILDCARD = "*";
-    static final String WILDCARD_USER = "User:" + WILDCARD;
+import lombok.Getter;
+import lombok.experimental.Accessors;
 
+public class AclEncoder {
+    @Getter
+    @Accessors(fluent = true)
     private final Context context;
     private final TypedEnumSort<ResourceType> resourceTypeSort;
     private final TypedEnumSort<AclOperation> aclOperationSort;
-    private final Expr<SeqSort<CharSort>> principal;
+    private final Expr<SeqSort<CharSort>> userPrincipal;
     private final Expr<SeqSort<CharSort>> host;
     private final Expr<EnumSort<AclOperation>> aclOperation;
     private final Expr<EnumSort<ResourceType>> resourceType;
@@ -31,65 +37,100 @@ public class AclEncoder {
         resourceTypeSort = TypedEnumSort.mkSort(context, ResourceType.class);
         aclOperationSort = TypedEnumSort.mkSort(context, AclOperation.class);
 
-        principal = context.mkConst("principal", context.getStringSort());
+        userPrincipal = context.mkConst("userPrincipal", context.getStringSort());
         host = context.mkConst("host", context.getStringSort());
         resourceName = context.mkConst("resourceName", context.getStringSort());
         resourceType = context.mkConst("resourceType", resourceTypeSort.sort());
         aclOperation = context.mkConst("operation", aclOperationSort.sort());
     }
 
-    public BoolExpr encode(AclBinding acl) {
-        BoolExpr principalExpr =
-                WILDCARD_USER.equals(acl.entry().principal()) ?
-                context.mkTrue() : context.mkEq(principal, context.mkString(acl.entry().principal()));
-        BoolExpr hostExpr =
-                WILDCARD.equals(acl.entry().host()) ?
-                context.mkTrue() : context.mkEq(host, context.mkString(acl.entry().host()));
-        BoolExpr operationExpr =
-                AclOperation.ALL == acl.entry().operation() ?
-                context.mkTrue() : context.mkEq(aclOperation, aclOperationSort.getConst(acl.entry().operation()));
-        BoolExpr resourceTypeExpr =
-                context.mkEq(resourceType, resourceTypeSort.getConst(acl.pattern().resourceType()));
+    public BoolExpr encode(AclSpec spec) {
+        List<BoolExpr> allow = new ArrayList<>();
+        List<BoolExpr> deny = new ArrayList<>();
 
-        final BoolExpr resourceNameExpr;
-        if (PatternType.PREFIXED == acl.pattern().patternType()) {
-            resourceNameExpr = context.mkPrefixOf(context.mkString(acl.pattern().name()), resourceName);
-        } else {
-            resourceNameExpr =
-                    WILDCARD.equals(acl.pattern().name()) ?
-                    context.mkTrue() : context.mkEq(resourceName, context.mkString(acl.pattern().name()));
+        for (AclEntry entry : spec.entries()) {
+            switch (entry.permission()) {
+                case Allow:
+                    allow.add(encode(entry));
+                    break;
+                case Deny:
+                    deny.add(encode(entry));
+                    break;
+            }
         }
 
+        return context.mkAnd(
+                context.mkOr(allow.stream().toArray(BoolExpr[]::new)),
+                context.mkAnd(deny.stream().toArray(BoolExpr[]::new)));
+    }
+
+    public BoolExpr encode(AclEntry entry) {
+        BoolExpr userPrincipalExpr = encode(userPrincipal, entry.userPrincipal());
+        BoolExpr hostExpr = encode(host, entry.host());
+        BoolExpr operationExpr = encode(entry.operation());
+        BoolExpr resourceTypeExpr = encode(entry.resourceType());
+        BoolExpr resourceNameExpr = encode(resourceName, entry.resourceName());
+
         BoolExpr expr = context.mkAnd(
-                principalExpr,
+                userPrincipalExpr,
                 hostExpr,
                 operationExpr,
                 resourceTypeExpr,
                 resourceNameExpr);
 
-        if (acl.entry().permissionType() == AclPermissionType.DENY) {
+        if (entry.permission() == PermissionType.Deny) {
             return context.mkNot(expr);
         }
         return expr;
     }
 
-    public BoolExpr encode(AuthorizableRequest request) {
-        BoolExpr principalExpr =
-                context.mkEq(principal, context.mkString(request.principal()));
-        BoolExpr hostExpr =
-                context.mkEq(host, context.mkString(request.host()));
-        BoolExpr operationExpr =
-                context.mkEq(aclOperation, aclOperationSort.getConst(request.operation()));
-        BoolExpr resourceTypeExpr =
-                context.mkEq(resourceType, resourceTypeSort.getConst(request.resourceType()));
-        BoolExpr resourceNameExpr =
-                context.mkEq(resourceName, context.mkString(request.resourceName()));
+    private BoolExpr encode(OperationCondition condition) {
+        if (condition.value() == AclOperation.ALL) {
+            if (condition.op() == OperationCondition.Operator.Eq) {
+                return context.mkTrue();
+            } else {
+                return context.mkFalse();
+            }
+        } else {
+            BoolExpr expr = context.mkEq(aclOperation, aclOperationSort.getConst(condition.value()));
+            if (condition.op() == OperationCondition.Operator.NotEq) {
+                return context.mkNot(expr);
+            }
+            return expr;
+        }
+    }
 
-        return context.mkAnd(
-                principalExpr,
-                hostExpr,
-                operationExpr,
-                resourceTypeExpr,
-                resourceNameExpr);
+    private BoolExpr encode(ResourceTypeCondition condition) {
+        BoolExpr expr = context.mkEq(resourceType, resourceTypeSort.getConst(condition.value()));
+        if (condition.op() == ResourceTypeCondition.Operator.NotEq) {
+            return context.mkNot(expr);
+        }
+        return expr;
+    }
+
+    private BoolExpr encode(
+            Expr<SeqSort<CharSort>> expr,
+            StringCondition condition) {
+        if (AclSpec.WILDCARD.equals(condition.value())) {
+            if (condition.op() == StringCondition.Operator.NotEq) {
+                return context.mkFalse();
+            } else {
+                return context.mkTrue();
+            }
+        } else {
+            switch (condition.op()) {
+                case Eq:
+                    return context.mkEq(expr, context.mkString(condition.value()));
+                case NotEq:
+                    return context.mkNot(context.mkEq(expr, context.mkString(condition.value())));
+                case StartWith:
+                    return context.mkPrefixOf(context.mkString(condition.value()), expr);
+                case EndWith:
+                    return context.mkSuffixOf(context.mkString(condition.value()), expr);
+                case Contains:
+                    return context.mkContains(expr, context.mkString(condition.value()));
+            }
+        }
+        throw new RuntimeException("Never happen");
     }
 }

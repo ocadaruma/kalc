@@ -21,8 +21,10 @@ public final class AclBindingBuilder {
     private final AclPermissionType type;
     @Setter
     @Accessors(fluent = true)
-    private String host = AclEncoder.WILDCARD;
-    private String principal = AclEncoder.WILDCARD_USER;
+    private String host = AclSpec.WILDCARD;
+    @Setter
+    @Accessors(fluent = true)
+    private String userPrincipal = AclSpec.WILDCARD;
     @Setter
     @Accessors(fluent = true)
     private AclOperation operation;
@@ -36,11 +38,6 @@ public final class AclBindingBuilder {
 
     public static AclBindingBuilder deny() {
         return new AclBindingBuilder(AclPermissionType.DENY);
-    }
-
-    public AclBindingBuilder user(String name) {
-        principal = "User:" + name;
-        return this;
     }
 
     public AclBindingBuilder prefixed(ResourceType resourceType, String prefix) {
@@ -63,7 +60,7 @@ public final class AclBindingBuilder {
                 resourceName,
                 resourcePatternType);
         AccessControlEntry entry = new AccessControlEntry(
-                principal,
+                "User:" + userPrincipal,
                 host,
                 operation,
                 type);
