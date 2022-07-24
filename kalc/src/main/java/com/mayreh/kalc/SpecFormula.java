@@ -13,11 +13,11 @@ import com.microsoft.z3.Status;
 import lombok.Value;
 import lombok.experimental.Accessors;
 
-public class SpecEvaluator {
+public class SpecFormula {
     private final Context context;
     private final BoolExpr specExpr;
 
-    public SpecEvaluator(AclEncoder encoder, AclSpec spec) {
+    public SpecFormula(AclEncoder encoder, AclSpec spec) {
         context = encoder.context();
         specExpr = encoder.encode(spec);
     }
@@ -43,7 +43,7 @@ public class SpecEvaluator {
         Map<String, String> example;
     }
 
-    public Permissiveness permissiveThan(SpecEvaluator other) {
+    public Permissiveness permissiveThan(SpecFormula other) {
         Solver solver = context.mkSolver();
 
         solver.add(other.specExpr);
@@ -64,7 +64,7 @@ public class SpecEvaluator {
         return new Permissiveness(true, counterexample);
     }
 
-    public Satisfiability satisfy(SpecEvaluator other) {
+    public Satisfiability satisfy(SpecFormula other) {
         Solver solver = context.mkSolver();
 
         solver.add(specExpr);

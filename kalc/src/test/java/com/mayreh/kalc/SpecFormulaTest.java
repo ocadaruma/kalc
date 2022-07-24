@@ -10,15 +10,13 @@ import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.resource.ResourceType;
 import org.junit.Test;
 
-import com.mayreh.kalc.SpecEvaluator.Permissiveness;
 import com.microsoft.z3.Context;
 
-public class SpecEvaluatorTest {
+public class SpecFormulaTest {
     @Test
     public void testAllow() {
-        inContext(ctx -> {
-            AclEncoder encoder = new AclEncoder(ctx);
-            SpecEvaluator evaluator = new SpecEvaluator(
+        withEncoder(encoder -> {
+            SpecFormula formula = new SpecFormula(
                     encoder,
                     AclSpec.fromAclBindings(Arrays.asList(
                             AclBindingBuilder
@@ -40,8 +38,8 @@ public class SpecEvaluatorTest {
                                     .build()))
             );
 
-            assertTrue(evaluator.satisfy(
-                    new SpecEvaluator(encoder, AclSpec.fromRequest(
+            assertTrue(formula.satisfy(
+                    new SpecFormula(encoder, AclSpec.fromRequest(
                             AuthorizableRequest
                                     .builder()
                                     .userPrincipal("foo-producer")
@@ -51,8 +49,8 @@ public class SpecEvaluatorTest {
                                     .resourceName("foo-topic")
                                     .build()))
             ).satisfiable());
-            assertTrue(evaluator.satisfy(
-                    new SpecEvaluator(encoder, AclSpec.fromRequest(
+            assertTrue(formula.satisfy(
+                    new SpecFormula(encoder, AclSpec.fromRequest(
                             AuthorizableRequest
                                     .builder()
                                     .userPrincipal("foo-producer")
@@ -62,8 +60,8 @@ public class SpecEvaluatorTest {
                                     .resourceName("foo-topic")
                                     .build()))
             ).satisfiable());
-            assertFalse(evaluator.satisfy(
-                    new SpecEvaluator(encoder, AclSpec.fromRequest(
+            assertFalse(formula.satisfy(
+                    new SpecFormula(encoder, AclSpec.fromRequest(
                             AuthorizableRequest
                                     .builder()
                                     .userPrincipal("foo-producer")
@@ -78,9 +76,8 @@ public class SpecEvaluatorTest {
 
     @Test
     public void testDeny() {
-        inContext(ctx -> {
-            AclEncoder encoder = new AclEncoder(ctx);
-            SpecEvaluator evaluator = new SpecEvaluator(
+        withEncoder(encoder -> {
+            SpecFormula formula = new SpecFormula(
                     encoder,
                     AclSpec.fromAclBindings(Arrays.asList(
                             AclBindingBuilder
@@ -108,8 +105,8 @@ public class SpecEvaluatorTest {
                                     .build()
             )));
 
-            assertFalse(evaluator.satisfy(
-                    new SpecEvaluator(
+            assertFalse(formula.satisfy(
+                    new SpecFormula(
                             encoder,
                             AclSpec.fromRequest(
                                     AuthorizableRequest
@@ -126,9 +123,8 @@ public class SpecEvaluatorTest {
 
     @Test
     public void testPermissive() {
-        inContext(ctx -> {
-            AclEncoder encoder = new AclEncoder(ctx);
-            SpecEvaluator evaluator = new SpecEvaluator(
+        withEncoder(encoder -> {
+            SpecFormula formula = new SpecFormula(
                     encoder,
                     AclSpec.fromAclBindings(
                             Arrays.asList(
@@ -151,7 +147,7 @@ public class SpecEvaluatorTest {
                             .build()
             )));
 
-            SpecEvaluator otherEvaluator = new SpecEvaluator(
+            SpecFormula otherFormula = new SpecFormula(
                     encoder,
                     AclSpec.fromAclBindings(Arrays.asList(
                             AclBindingBuilder
@@ -161,15 +157,14 @@ public class SpecEvaluatorTest {
                                     .operation(AclOperation.ALL)
                                     .build())));
 
-            assertTrue(evaluator.permissiveThan(otherEvaluator).permissive());
+            assertTrue(formula.permissiveThan(otherFormula).permissive());
         });
     }
 
     @Test
     public void testNotPermissive() {
-        inContext(ctx -> {
-            AclEncoder encoder = new AclEncoder(ctx);
-            SpecEvaluator evaluator = new SpecEvaluator(
+        withEncoder(encoder -> {
+            SpecFormula formula = new SpecFormula(
                     encoder,
                     AclSpec.fromAclBindings(Arrays.asList(
                             AclBindingBuilder
@@ -191,7 +186,7 @@ public class SpecEvaluatorTest {
                                     .build()
                     )));
 
-            SpecEvaluator otherEvaluator = new SpecEvaluator(
+            SpecFormula otherFormula = new SpecFormula(
                     encoder,
                     AclSpec.fromAclBindings(Arrays.asList(
                             AclBindingBuilder
@@ -201,14 +196,13 @@ public class SpecEvaluatorTest {
                                     .operation(AclOperation.WRITE)
                                     .build())));
 
-            Permissiveness result = evaluator.permissiveThan(otherEvaluator);
-            assertFalse(result.permissive());
+            assertFalse(formula.permissiveThan(otherFormula).permissive());
         });
     }
 
-    private static void inContext(Consumer<Context> op) {
+    private static void withEncoder(Consumer<AclEncoder> op) {
         try (Context context = new Context()) {
-            op.accept(context);
+            op.accept(new AclEncoder(context));
         }
     }
 }
