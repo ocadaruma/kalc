@@ -1,6 +1,7 @@
 package com.mayreh.kalc.cli;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Collection;
@@ -73,6 +74,15 @@ public class Cli implements Runnable {
             Properties props = new Properties();
             props.setProperty(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
             props.setProperty(AdminClientConfig.CLIENT_ID_CONFIG, "kalc-admin-client");
+
+            if (commandConfigFile != null) {
+                Properties commandConfig = new Properties();
+                try (FileInputStream is = new FileInputStream(commandConfigFile)) {
+                    commandConfig.load(is);
+                }
+                props.putAll(commandConfig);
+            }
+
             try (Admin admin = Admin.create(props)) {
                 Collection<AclBinding> bindings = admin.describeAcls(AclBindingFilter.ANY).values().get();
                 mapper.writeValue(outputFile, AclSpec.fromAclBindings(bindings));
