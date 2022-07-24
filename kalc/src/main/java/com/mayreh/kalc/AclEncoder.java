@@ -20,7 +20,7 @@ import com.microsoft.z3.SeqSort;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 
-public class AclEncoder {
+public class AclEncoder implements AutoCloseable {
     @Getter
     @Accessors(fluent = true)
     private final Context context;
@@ -32,8 +32,8 @@ public class AclEncoder {
     private final Expr<EnumSort<ResourceType>> resourceType;
     private final Expr<SeqSort<CharSort>> resourceName;
 
-    public AclEncoder(Context context) {
-        this.context = context;
+    public AclEncoder() {
+        context = new Context();
         resourceTypeSort = TypedEnumSort.mkSort(context, ResourceType.class);
         aclOperationSort = TypedEnumSort.mkSort(context, AclOperation.class);
 
@@ -132,5 +132,10 @@ public class AclEncoder {
             }
         }
         throw new RuntimeException("Never happen");
+    }
+
+    @Override
+    public void close() {
+        context.close();
     }
 }

@@ -1,0 +1,18 @@
+buildscript {
+    repositories {
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+    }
+    dependencies {
+        classpath "gradle.plugin.com.github.johnrengelman:shadow:7.1.2"
+    }
+}
+
+apply plugin: "com.github.johnrengelman.shadow"
+
+dependencies {
+    implementation project(":kalc")
+    implementation "info.picocli:picocli:4.6.3"
+    implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.13.3"
+}

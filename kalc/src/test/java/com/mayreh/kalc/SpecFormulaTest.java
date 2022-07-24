@@ -10,8 +10,6 @@ import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.resource.ResourceType;
 import org.junit.Test;
 
-import com.microsoft.z3.Context;
-
 public class SpecFormulaTest {
     @Test
     public void testAllow() {
@@ -201,8 +199,8 @@ public class SpecFormulaTest {
     }
 
     private static void withEncoder(Consumer<AclEncoder> op) {
-        try (Context context = new Context()) {
-            op.accept(new AclEncoder(context));
+        try (AclEncoder encoder = new AclEncoder()) {
+            op.accept(encoder);
         }
     }
 }
