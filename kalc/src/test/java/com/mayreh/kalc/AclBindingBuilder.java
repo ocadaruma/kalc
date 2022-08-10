@@ -21,10 +21,10 @@ public final class AclBindingBuilder {
     private final AclPermissionType type;
     @Setter
     @Accessors(fluent = true)
-    private String host = AclSpec.WILDCARD;
+    private String host = AclConstraint.WILDCARD;
     @Setter
     @Accessors(fluent = true)
-    private String userPrincipal = AclSpec.WILDCARD;
+    private String userPrincipal = AclConstraint.WILDCARD;
     @Setter
     @Accessors(fluent = true)
     private AclOperation operation;

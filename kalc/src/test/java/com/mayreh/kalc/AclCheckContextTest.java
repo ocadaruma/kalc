@@ -10,13 +10,12 @@ import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.resource.ResourceType;
 import org.junit.Test;
 
-public class SpecFormulaTest {
+public class AclCheckContextTest {
     @Test
     public void testAllow() {
-        withEncoder(encoder -> {
-            SpecFormula formula = new SpecFormula(
-                    encoder,
-                    AclSpec.fromAclBindings(Arrays.asList(
+        withContext(ctx -> {
+            AclPolicy policy = AclPolicy.fromAclBindings(
+                    Arrays.asList(
                             AclBindingBuilder
                                     .allow()
                                     .userPrincipal("admin")
@@ -33,51 +32,41 @@ public class SpecFormulaTest {
                                     .userPrincipal("foo-producer")
                                     .literal(ResourceType.TOPIC, "foo-topic")
                                     .operation(AclOperation.WRITE)
-                                    .build()))
+                                    .build())
             );
 
-            assertTrue(formula.satisfy(
-                    new SpecFormula(encoder, AclSpec.fromRequest(
-                            AuthorizableRequest
-                                    .builder()
-                                    .userPrincipal("foo-producer")
-                                    .host("127.0.0.1")
-                                    .operation(AclOperation.WRITE)
-                                    .resourceType(ResourceType.TOPIC)
-                                    .resourceName("foo-topic")
-                                    .build()))
-            ).satisfiable());
-            assertTrue(formula.satisfy(
-                    new SpecFormula(encoder, AclSpec.fromRequest(
-                            AuthorizableRequest
-                                    .builder()
-                                    .userPrincipal("foo-producer")
-                                    .host("127.0.0.1")
-                                    .operation(AclOperation.DESCRIBE)
-                                    .resourceType(ResourceType.TOPIC)
-                                    .resourceName("foo-topic")
-                                    .build()))
-            ).satisfiable());
-            assertFalse(formula.satisfy(
-                    new SpecFormula(encoder, AclSpec.fromRequest(
-                            AuthorizableRequest
-                                    .builder()
-                                    .userPrincipal("foo-producer")
-                                    .host("127.0.0.1")
-                                    .operation(AclOperation.WRITE)
-                                    .resourceType(ResourceType.TOPIC)
-                                    .resourceName("bar-topic")
-                            .build()))
-            ).satisfiable());
+            assertTrue(ctx.intersection(
+                    policy,
+                    new AclConstraintBuilder()
+                            .userPrincipal(u -> u.in("foo-producer"))
+                            .host(h -> h.in("127.0.0.1"))
+                            .operation(AclOperation.WRITE)
+                            .resource(ResourceType.TOPIC, r -> r.in("foo-topic"))
+                            .build().toPolicy()).intersects());
+            assertTrue(ctx.intersection(
+                    policy,
+                    new AclConstraintBuilder()
+                            .userPrincipal(u -> u.in("foo-producer"))
+                            .host(h -> h.in("127.0.0.1"))
+                            .operation(AclOperation.DESCRIBE)
+                            .resource(ResourceType.TOPIC, r -> r.in("foo-topic"))
+                            .build().toPolicy()).intersects());
+            assertFalse(ctx.intersection(
+                    policy,
+                    new AclConstraintBuilder()
+                            .userPrincipal(u -> u.in("foo-producer"))
+                            .host(h -> h.in("127.0.0.1"))
+                            .operation(AclOperation.WRITE)
+                            .resource(ResourceType.TOPIC, r -> r.in("bar-topic"))
+                            .build().toPolicy()).intersects());
         });
     }
 
     @Test
     public void testDeny() {
-        withEncoder(encoder -> {
-            SpecFormula formula = new SpecFormula(
-                    encoder,
-                    AclSpec.fromAclBindings(Arrays.asList(
+        withContext(ctx -> {
+            AclPolicy policy = AclPolicy.fromAclBindings(
+                    Arrays.asList(
                             AclBindingBuilder
                                     .allow()
                                     .userPrincipal("admin")
@@ -100,31 +89,24 @@ public class SpecFormulaTest {
                                     .userPrincipal("*")
                                     .literal(ResourceType.TOPIC, "*")
                                     .operation(AclOperation.ALL)
-                                    .build()
-            )));
+                                    .build())
+            );
 
-            assertFalse(formula.satisfy(
-                    new SpecFormula(
-                            encoder,
-                            AclSpec.fromRequest(
-                                    AuthorizableRequest
-                                            .builder()
-                                            .userPrincipal("foo-producer")
-                                            .host("127.0.0.1")
-                                            .operation(AclOperation.WRITE)
-                                            .resourceType(ResourceType.TOPIC)
-                                            .resourceName("foo-topic")
-                                            .build()))
-            ).satisfiable());
+            assertFalse(ctx.intersection(
+                    policy,
+                    new AclConstraintBuilder()
+                            .userPrincipal(u -> u.in("foo-producer"))
+                            .host(h -> h.in("127.0.0.1"))
+                            .operation(AclOperation.WRITE)
+                            .resource(ResourceType.TOPIC, r -> r.in("foo-topic"))
+                            .build().toPolicy()).intersects());
         });
     }
 
     @Test
     public void testPermissive() {
-        withEncoder(encoder -> {
-            SpecFormula formula = new SpecFormula(
-                    encoder,
-                    AclSpec.fromAclBindings(
+        withContext(ctx -> {
+            AclPolicy policy = AclPolicy.fromAclBindings(
                             Arrays.asList(
                                     AclBindingBuilder
                                             .allow()
@@ -142,29 +124,27 @@ public class SpecFormulaTest {
                             .userPrincipal("foo-producer")
                             .literal(ResourceType.TOPIC, "foo-topic")
                             .operation(AclOperation.WRITE)
-                            .build()
-            )));
+                            .build())
+            );
 
-            SpecFormula otherFormula = new SpecFormula(
-                    encoder,
-                    AclSpec.fromAclBindings(Arrays.asList(
+            AclPolicy otherPolicy = AclPolicy.fromAclBindings(
+                    Arrays.asList(
                             AclBindingBuilder
                                     .allow()
                                     .userPrincipal("admin")
                                     .literal(ResourceType.TOPIC, "*")
                                     .operation(AclOperation.ALL)
-                                    .build())));
+                                    .build()));
 
-            assertTrue(formula.permissiveThan(otherFormula).permissive());
+            assertTrue(ctx.supersetOf(policy, otherPolicy).isSuperset());
         });
     }
 
     @Test
     public void testNotPermissive() {
-        withEncoder(encoder -> {
-            SpecFormula formula = new SpecFormula(
-                    encoder,
-                    AclSpec.fromAclBindings(Arrays.asList(
+        withContext(ctx -> {
+            AclPolicy policy = AclPolicy.fromAclBindings(
+                    Arrays.asList(
                             AclBindingBuilder
                                     .allow()
                                     .userPrincipal("admin")
@@ -181,26 +161,25 @@ public class SpecFormulaTest {
                                     .userPrincipal("foo-producer")
                                     .literal(ResourceType.TOPIC, "foo-topic")
                                     .operation(AclOperation.WRITE)
-                                    .build()
-                    )));
+                                    .build())
+            );
 
-            SpecFormula otherFormula = new SpecFormula(
-                    encoder,
-                    AclSpec.fromAclBindings(Arrays.asList(
+            AclPolicy otherPolicy = AclPolicy.fromAclBindings(
+                    Arrays.asList(
                             AclBindingBuilder
                                     .allow()
                                     .userPrincipal("*")
                                     .literal(ResourceType.TOPIC, "foo-topic")
                                     .operation(AclOperation.WRITE)
-                                    .build())));
+                                    .build()));
 
-            assertFalse(formula.permissiveThan(otherFormula).permissive());
+            assertFalse(ctx.supersetOf(policy, otherPolicy).isSuperset());
         });
     }
 
-    private static void withEncoder(Consumer<AclEncoder> op) {
-        try (AclEncoder encoder = new AclEncoder()) {
-            op.accept(encoder);
+    private static void withContext(Consumer<AclCheckContext> op) {
+        try (AclCheckContext ctx = new AclCheckContext()) {
+            op.accept(ctx);
         }
     }
 }

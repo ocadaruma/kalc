@@ -18,11 +18,10 @@ import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
-import com.mayreh.kalc.AclEncoder;
-import com.mayreh.kalc.AclSpec;
-import com.mayreh.kalc.SpecFormula;
-import com.mayreh.kalc.SpecFormula.Permissiveness;
-import com.mayreh.kalc.SpecFormula.Satisfiability;
+import com.mayreh.kalc.AclCheckContext;
+import com.mayreh.kalc.AclCheckContext.IntersectionResult;
+import com.mayreh.kalc.AclCheckContext.SupersetResult;
+import com.mayreh.kalc.AclPolicy;
 import com.mayreh.kalc.cli.Cli.Check;
 import com.mayreh.kalc.cli.Cli.Dump;
 
@@ -85,7 +84,7 @@ public class Cli implements Runnable {
 
             try (Admin admin = Admin.create(props)) {
                 Collection<AclBinding> bindings = admin.describeAcls(AclBindingFilter.ANY).values().get();
-                mapper.writeValue(outputFile, AclSpec.fromAclBindings(bindings));
+                mapper.writeValue(outputFile, AclPolicy.fromAclBindings(bindings));
             } catch (ExecutionException e) {
                 throw new RuntimeException(e);
             } catch (InterruptedException e) {
@@ -96,80 +95,41 @@ public class Cli implements Runnable {
     }
 
     @Command(name = "check",
-            description = "Check if base-spec satisfies the given expectation against target-spec")
+            description = "Check if base-policy satisfies the given expectation against target-policy")
     static class Check implements IORunnable {
-        @Option(names = "--base-spec",
+        @Option(names = "--base-policy",
                 required = true)
-        private File baseSpecFile;
+        private File basePolicyFile;
 
-        @Option(names = "--target-spec",
+        @Option(names = "--target-policy",
                 required = true)
-        private File targetSpecFile;
+        private File targetPolicyFile;
 
-        @Option(names = "--expect",
+        @Option(names = "--check",
                 required = true)
-        private Expectation expect;
+        private Expectation check;
 
         private enum Expectation {
-            allow,
-            deny,
-            permissive,
-            lessPermissive,
+            intersection,
+            supersetOf,
         }
 
         @Override
         public void runIO() throws IOException {
-            AclSpec baseSpec = mapper.readValue(baseSpecFile, AclSpec.class);
-            AclSpec targetSpec = mapper.readValue(targetSpecFile, AclSpec.class);
+            AclPolicy basePolicy = mapper.readValue(basePolicyFile, AclPolicy.class);
+            AclPolicy targetPolicy = mapper.readValue(targetPolicyFile, AclPolicy.class);
 
-            try (AclEncoder encoder = new AclEncoder()) {
-                SpecFormula baseFormula = new SpecFormula(encoder, baseSpec);
-                SpecFormula targetFormula = new SpecFormula(encoder, targetSpec);
-
-                Satisfiability satisfiability;
-                Permissiveness permissiveness;
-                switch (expect) {
-                    case allow:
-                        satisfiability = baseFormula.satisfy(targetFormula);
-                        if (satisfiability.satisfiable()) {
-                            System.out.println("Result  : SUCCESS");
-                            System.out.println("Example :");
-                            satisfiability.example().forEach((k, v) -> System.out.printf("  %s = %s\n", k, v));
-                        } else {
-                            System.out.println("Result : FAILED");
-                        }
+            try (AclCheckContext ctx = new AclCheckContext()) {
+                switch (check) {
+                    case intersection:
+                        IntersectionResult intersection = ctx.intersection(basePolicy, targetPolicy);
+                        System.out.printf("Result  : %s\n", intersection.intersects());
+                        System.out.printf("Example : %s\n", intersection.example());
                         break;
-                    case deny:
-                        satisfiability = baseFormula.satisfy(targetFormula);
-                        if (!satisfiability.satisfiable()) {
-                            System.out.println("Result : SUCCESS");
-                        } else {
-                            System.out.println("Result          : FAILED");
-                            System.out.println("Counter example :");
-                            satisfiability.example().forEach((k, v) -> System.out.printf("  %s = %s\n", k, v));
-                        }
-                        break;
-                    case permissive:
-                        permissiveness = baseFormula.permissiveThan(targetFormula);
-                        if (permissiveness.permissive()) {
-                            System.out.println("Result : SUCCESS");
-                        } else {
-                            System.out.println("Result          : FAILED");
-                            System.out.println("Counter example :");
-                            permissiveness.counterexample().forEach(
-                                    (k, v) -> System.out.printf("  %s = %s\n", k, v));
-                        }
-                        break;
-                    case lessPermissive:
-                        permissiveness = baseFormula.permissiveThan(targetFormula);
-                        if (!permissiveness.permissive()) {
-                            System.out.println("Result  : SUCCESS");
-                            System.out.println("Example :");
-                            permissiveness.counterexample().forEach(
-                                    (k, v) -> System.out.printf("  %s = %s\n", k, v));
-                        } else {
-                            System.out.println("Result : FAILED");
-                        }
+                    case supersetOf:
+                        SupersetResult supersetResult = ctx.supersetOf(basePolicy, targetPolicy);
+                        System.out.printf("Result          : %s\n", supersetResult.isSuperset());
+                        System.out.printf("Counter Example : %s\n", supersetResult.counterexample());
                         break;
                 }
             }
