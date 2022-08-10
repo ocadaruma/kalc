@@ -4,6 +4,7 @@ import static com.mayreh.kalc.Utils.require;
 import static com.mayreh.kalc.Utils.requireNoneOf;
 import static java.util.Collections.singletonList;
 
+import java.beans.ConstructorProperties;
 import java.util.List;
 
 import org.apache.kafka.common.acl.AclOperation;
@@ -55,6 +56,7 @@ public class AclConstraint {
         @NonNull
         List<String> value;
 
+        @ConstructorProperties({"negate", "op", "value"})
         public StringCondition(
                 boolean negate,
                 @NonNull StringOperator op,
@@ -74,6 +76,7 @@ public class AclConstraint {
         @NonNull
         AclOperation value;
 
+        @ConstructorProperties({"op", "value"})
         public AclOperationCondition(
                 @NonNull EqualityOperator op,
                 @NonNull AclOperation value) {
@@ -94,6 +97,7 @@ public class AclConstraint {
         @NonNull
         StringCondition resourceName;
 
+        @ConstructorProperties({"resourceType", "resourceName"})
         public ResourceCondition(
                 @NonNull ResourceType resourceType,
                 @NonNull StringCondition resourceName) {
