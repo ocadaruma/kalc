@@ -1,6 +1,7 @@
 package com.mayreh.kalc;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -65,8 +66,15 @@ public class AclCheckContext implements AutoCloseable {
 
     public AclCheckContext() {
         context = new Context();
-        resourceTypeSort = TypedEnumSort.mkSort(context, ResourceType.class);
-        aclOperationSort = TypedEnumSort.mkSort(context, AclOperation.class);
+        resourceTypeSort = TypedEnumSort.mkSort(
+                context,
+                ResourceType.class,
+                // exclude these variants to prevent returned from solver
+                Arrays.asList(ResourceType.ANY, ResourceType.UNKNOWN));
+        aclOperationSort = TypedEnumSort.mkSort(
+                context,
+                AclOperation.class,
+                Arrays.asList(AclOperation.ANY, AclOperation.UNKNOWN, AclOperation.ALL));
 
         userPrincipal = context.mkConst(USER_PRINCIPAL, context.getStringSort());
         host = context.mkConst(HOST, context.getStringSort());

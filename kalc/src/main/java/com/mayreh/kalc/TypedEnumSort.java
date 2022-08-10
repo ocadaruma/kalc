@@ -1,6 +1,7 @@
 package com.mayreh.kalc;
 
 import java.util.Arrays;
+import java.util.List;
 
 import com.microsoft.z3.Context;
 import com.microsoft.z3.EnumSort;
@@ -23,10 +24,12 @@ public final class TypedEnumSort<T extends Enum<T>> {
         return sort.getConst(idx);
     }
 
-    public static <T extends Enum<T>> TypedEnumSort<T> mkSort(Context context, Class<T> clazz) {
+    public static <T extends Enum<T>> TypedEnumSort<T> mkSort(
+            Context context, Class<T> clazz, List<T> exclusion) {
         EnumSort<T> sort = context.mkEnumSort(
                 clazz.getSimpleName(),
                 Arrays.stream(clazz.getEnumConstants())
+                      .filter(e -> !exclusion.contains(e))
                       .map(Enum::toString)
                       .toArray(String[]::new));
 
