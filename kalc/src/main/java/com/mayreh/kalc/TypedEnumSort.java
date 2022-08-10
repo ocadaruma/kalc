@@ -1,5 +1,7 @@
 package com.mayreh.kalc;
 
+import static java.util.stream.Collectors.toList;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -18,21 +20,24 @@ public final class TypedEnumSort<T extends Enum<T>> {
     @Accessors(fluent = true)
     private final EnumSort<T> sort;
     private final Class<T> clazz;
+    private final List<T> variants;
 
     public Expr<EnumSort<T>> getConst(T variant) {
-        int idx = Arrays.asList(clazz.getEnumConstants()).indexOf(variant);
+        int idx = variants.indexOf(variant);
         return sort.getConst(idx);
     }
 
     public static <T extends Enum<T>> TypedEnumSort<T> mkSort(
             Context context, Class<T> clazz, List<T> exclusion) {
+        List<T> variants = Arrays.stream(clazz.getEnumConstants())
+                                 .filter(e -> !exclusion.contains(e))
+                                 .collect(toList());
         EnumSort<T> sort = context.mkEnumSort(
                 clazz.getSimpleName(),
-                Arrays.stream(clazz.getEnumConstants())
-                      .filter(e -> !exclusion.contains(e))
-                      .map(Enum::toString)
-                      .toArray(String[]::new));
+                variants.stream()
+                        .map(Enum::toString)
+                        .toArray(String[]::new));
 
-        return new TypedEnumSort<>(sort, clazz);
+        return new TypedEnumSort<>(sort, clazz, variants);
     }
 }
